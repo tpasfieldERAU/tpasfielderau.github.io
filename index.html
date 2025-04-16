@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+    <style>
+        .grid-flex {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5%;
+            align-items: flex-start;
+        }
+
+        .text-col {
+            flex: 0 0 60%;
+        }
+
+        .image-col {
+            flex: 0 0 30%;
+        }
+
+        /* Stack columns on smaller screens */
+        @media (max-width: 768px) {
+
+            .text-col,
+            .image-col {
+                flex: 0 0 100%;
+            }
+        }
+
+        .image-col img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+    </style>
+
+    <title>Producing Synthetic CT for V-Net Training</title>
+</head>
+
+<body>
+    <header class="container">
+        <h1>Producing Synthetic CT Imagery to Train 3D V-Net Segmentation Models</h1>
+        <br>
+        <h4>Thomas Pasfield (<a href="mailto:pasfielt@my.erau.edu">pasfielt@my.erau.edu</a>)</h4>
+        <h6>Senior in Computational Mathematics,
+            Embry-Riddle Aeronautical University,
+            Daytona Beach, FL
+        </h6>
+    </header>
+    <hr>
+    <main class="container">
+        <section>
+            <h2 id="Recap">A Brief Recap of the Project</h2>
+            <p>A PDF copy of the poster presented at ERAU's Discovery Day 2025 event can be found <a
+                    href="PasfieldDiscoveryDay2025.pdf" download>here.</a></p>
+            <h3 id="Abstract">Abstract</h3>
+            <p>In this work we introduce a novel framework for synthesizing industrial CT-like images directly from 3D
+                printer G-code to train a volumetric segmentation model. In this approach, the G-code (FDM toolpath
+                instructions) is converted into a dense 3D volume using a custom anti-aliased line rendering algorithm,
+                yielding synthetic CT images where voxel brightness corresponds to printed material density. Each
+                generated volume is
+                paired with a ground-truth label volume (distinguishing plastics from air), providing a ready-made
+                training dataset for a V-Net segmentation network. We enhance this dataset with various augmentations
+                including noise injection, optical blur, and artificial void defects to increase diversity and realism.
+                Using HPC resources, the V-Net is trained and validated on these synthetic volumes, focusing on
+                segmenting thermoplastic material within dense printed structures (≥70% infill). A qualitative
+                evaluation against a real CT-scanned print (with manual segmentation labels) shows that the model can
+                correctly identify material regions, demonstrating the feasibility of the synthetic training approach.
+                This work provides a proof-of-concept that G-code-derived synthetic CT data can effectively train 3D
+                segmentation models, offering a promising solution when real labeled CT datasets are scarce. Future work
+                will expand on real-world validation and explore integrating G-code data as sparse annotations in
+                advanced segmentation techniques.</p>
+            <h3 id="Keywords">Keywords</h3>
+            <p>Computed Tomography (CT), Segmentation, Deep Learning, Computer Vision, Additive Manufacturing, Convolutional Neural Networks, Fully Convolutional Networks</p>
+
+            <h3 id="Motivation">Motivation</h3>
+            <ul>
+                <li>While working on a previous 3D printing CT analysis project, segmentation became the largest hurdle to overcome.</li>
+                <li>Thermoplastics have similar densities and the material spans a wide range of values in the final scan.</li>
+                <li>Many existing CT segmentation models focus on organic samples, not industrial samples.</li>
+                <li>Industrial samples have more prior knowledge to work from, possibly allowing for more informed segmentation models to be created.</li>
+                <li>Machine Learning (ML) model training requires both testing and training dataset, which could reasonably be generated with the same data the 3D printer receives.</li>
+            </ul>
+
+            <h3 id="Objectives">Objectives</h3>
+            <ol>
+                <li>Develop an approach for parsing the necessary G-code for simulation.</li>
+                <li>Develop a method to render the G-code in 2-D and 3D space.</li>
+                <li>Use real units and values in the render process. Generate labels for each voxel.</li>
+                <li>Use the generated data to train a custom V-Net model to perform semantic segmentation tasks.</li>
+            </ol>
+
+            <h3 id="TestData">Test Data Source</h3>
+            <div class="grid-flex">
+                <div class="text-col">
+                    <p>
+                        The original CT scan, model, and G-code data were provided by the Pacific Northwest National Laboratory (PNNL) for previous work. The data depicts a 2 cm diameter cylinder consisting of Poly-Lactic Acid (PLA), Polycarbonate (PC), and Nylon filament materials. The model was sliced with Bambu Studio with an infill percentage of 95% and printed on a Bambu X1. An engineering sketch of the model, the Bambu Studio file, the generated G-code, and a 21 &mu;m resolution micro-CT scan were provided by PNNL.
+                    </p>
+                    <p>
+                        Data was provided as a stack of 1789 TIFF images with 32-bit floating point value depth, composing a 1085 x 1085 x 1789 voxel volume.
+                    </p>
+                </div>
+                <div class="image-col">
+                    <figure>
+                        <img src="assets/PNNL-slices.png"
+                            alt="A 28x10 grid of 2D cross-sections of the CT scan provided by PNNL."
+                            style="float:right;">
+                        <figcaption>
+                            <b>Figure 1.</b> A 28x10 grid of 2D cross-sections of the CT scan provided by PNNL.
+                        </figcaption>
+                    </figure>
+                </div>
+            </div>
+
+        </section>
+        <section>
+            <h2>CT Synthesis Overview</h2>
+            <h6><em>How does G-code work?</em></h6>
+            <p>
+                G-code is the primary high-level numerical control language for manufacturing. It defines the movements and states of various tools such as CNC mills and 3D printers. G-code is inherently a vector format and defines movements based on points in continuous 3D space, and leaves it up to the machine to perform the smoothing and interpolation needed to achieve the motion within the desired parameters. In the realm of 3D printing, G-code controls motion, extrusion rate, filament material, nozzle temperature, and more. Some manufacturers implement their own metadata and instructions in the comments of G-code files. These are not always necessary for a print, but allow the target printer to perform at its best possible quality and control. A common dialect of G-code for 3D printing is Marlin, originally created for their titular open-source firmware project.
+            </p>
+            <p>
+                In practice, in all 3D slicers we have tested, the G-code sent to the printer is composed nearly
+                entirely of line segment motions, with no continuous curved paths. This greatly simplifies parsing and storage of these values for our use. G-code containing only line segment motions allows a CT scan to be approximated by drawing the toolpath in a discrete 3D volume.
+            </p>
+            <h3>The Synthesis Framework</h3>
+            <h3>Synthesis Applications</h3>
+        </section>
+        <section>
+            <h2>Volumetric Semantic Segmentation</h2>
+            <h3>Manual Methods</h3>
+            <h3>V-Net Models</h3>
+            <h4>The Original Paper</h4>
+            <h4>Later Modifications</h4>
+            <h3>Initial Approach</h3>
+            <h3>Current Approach</h3>
+        </section>
+        <section>
+            <h2>Preliminary Results</h2>
+        </section>
+        <section>
+            <h2>Project Continuation</h2>
+        </section>
+        <section>
+            <h2>References</h2>
+        </section>
+    </main>
+
+</body>
+
+</html>
